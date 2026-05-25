@@ -471,7 +471,7 @@ def main() -> None:
         logger.warning("Failed to send Telegram start notification: %s", exc)
 
     # ── 8. Start webhook server (daemon thread) ───────────────────────────
-    webhook_thread = start_webhook_server()
+    # webhook_thread = start_webhook_server() # Disabled for Render deployment
 
     # ── 9. Start dashboard subprocess ─────────────────────────────────────
     _dashboard_proc = start_dashboard()
