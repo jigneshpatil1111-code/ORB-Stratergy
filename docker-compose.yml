@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# docker-compose.yml — ORB Intraday Trading System
+#
+# Single-service composition (all-in-one container).
+# Volumes persist SQLite database, logs, and the stock universe file.
+# ---------------------------------------------------------------------------
+
+version: "3.8"
+
+services:
+  orb-trader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orb-trading-bot
+    env_file: .env
+    ports:
+      - "8000:8000"    # FastAPI Webhook / Health / API
+      - "8501:8501"    # Streamlit Dashboard
+    volumes:
+      - ./data:/app/data              # SQLite persistence
+      - ./logs:/app/logs              # Log file persistence
+      - ./nifty50.json:/app/nifty50.json  # Stock universe
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    environment:
+      - TZ=Asia/Kolkata
+      - PYTHONUNBUFFERED=1
