@@ -359,7 +359,7 @@ def _render_live_scanner(db: TradeDB) -> None:
         "container_id": "tradingview_custom",
         "width": "100%",
         "height": "500"
-      });
+      }});
       </script>
     </div>
     <!-- TradingView Widget END -->
