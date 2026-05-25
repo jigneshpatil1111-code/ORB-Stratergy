@@ -333,17 +333,19 @@ def _render_live_scanner(db: TradeDB) -> None:
         st.info("⏳ No stock states available yet. The engine populates this after 09:20 IST.")
 
     # --- TradingView chart widget ---
-    st.markdown("### 📊 NIFTY 50 Index — Live Chart")
-    tradingview_html = """
-    <div style="border: 1px solid rgba(0,212,255,0.15); border-radius:12px; overflow:hidden;">
+    st.markdown("### 📊 Interactive Live Chart")
+    chart_symbol = st.text_input("🔍 Search Symbol for Chart (e.g., NSE:RELIANCE, AAPL)", value="NSE:NIFTY")
+
+    tradingview_html = f"""
+    <div style="border: 1px solid rgba(0,212,255,0.15); border-radius:12px; overflow:hidden; margin-top:10px;">
     <!-- TradingView Widget BEGIN -->
     <div class="tradingview-widget-container">
-      <div id="tradingview_nifty"></div>
+      <div id="tradingview_custom"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
       <script type="text/javascript">
-      new TradingView.widget({
+      new TradingView.widget({{
         "autosize": true,
-        "symbol": "NSE:NIFTY",
+        "symbol": "{chart_symbol}",
         "interval": "5",
         "timezone": "Asia/Kolkata",
         "theme": "dark",
@@ -354,7 +356,7 @@ def _render_live_scanner(db: TradeDB) -> None:
         "hide_top_toolbar": false,
         "hide_legend": false,
         "save_image": false,
-        "container_id": "tradingview_nifty",
+        "container_id": "tradingview_custom",
         "width": "100%",
         "height": "500"
       });
@@ -570,6 +572,39 @@ def _render_system_status(db: TradeDB) -> None:
                 st.error(f"❌ Failed to save token: {exc}")
         else:
             st.warning("⚠️ Please paste a valid access token (min 10 characters).")
+
+    st.markdown("---")
+
+    # --- Add Stock to Watchlist ---
+    st.markdown("#### ➕ Add Stock to Watchlist")
+    st.caption("Add a new stock to your nifty50.json scanner universe. (Requires Dhan Security ID)")
+    
+    import json
+    colA, colB = st.columns(2)
+    new_sym = colA.text_input("Symbol (e.g., INFY)", key="new_stock_sym")
+    new_sec_id = colB.number_input("Security ID", min_value=1, step=1, key="new_stock_id")
+    if st.button("Add to Scanner"):
+        if new_sym and new_sec_id > 1:
+            try:
+                univ_path = os.path.join(_PROJECT_ROOT, "nifty50.json")
+                if os.path.exists(univ_path):
+                    with open(univ_path, "r") as f:
+                        univ = json.load(f)
+                else:
+                    univ = []
+                
+                # Check if already exists
+                if any(x.get("symbol") == new_sym.upper() for x in univ):
+                    st.warning(f"⚠️ {new_sym.upper()} is already in the watchlist!")
+                else:
+                    univ.append({"security_id": int(new_sec_id), "symbol": new_sym.upper(), "exchange": "NSE_EQ"})
+                    with open(univ_path, "w") as f:
+                        json.dump(univ, f, indent=2)
+                    st.success(f"✅ {new_sym.upper()} added! It will be scanned in the next pre-market setup.")
+            except Exception as e:
+                st.error(f"Failed to add stock: {e}")
+        else:
+            st.warning("⚠️ Please provide a valid Symbol and Security ID.")
 
     st.markdown("---")
 

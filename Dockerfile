@@ -43,8 +43,7 @@ RUN mkdir -p /app/data /app/logs
 EXPOSE 8000 8501
 
 # ── Health check ───────────────────────────────────────────────────────────
-HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=30s \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Removed to prevent conflicts on Render when Webhook is disabled.
 
 # ── Entrypoint ─────────────────────────────────────────────────────────────
 CMD ["python", "-u", "main.py"]
