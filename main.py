@@ -167,12 +167,13 @@ def start_dashboard() -> Optional[subprocess.Popen]:
         logger.warning("dashboard.py not found — skipping dashboard launch.")
         return None
 
+    port = os.environ.get("PORT", "8501")
     try:
         proc = subprocess.Popen(
             [
                 sys.executable, "-m", "streamlit", "run",
                 str(dashboard_path),
-                "--server.port", "8501",
+                "--server.port", port,
                 "--server.headless", "true",
                 "--server.address", "0.0.0.0",
                 "--browser.gatherUsageStats", "false",
@@ -181,7 +182,7 @@ def start_dashboard() -> Optional[subprocess.Popen]:
             stderr=subprocess.DEVNULL,
             cwd=str(PROJECT_ROOT),
         )
-        logger.info("Streamlit dashboard started (PID %d) on :8501.", proc.pid)
+        logger.info("Streamlit dashboard started (PID %d) on :%s.", proc.pid, port)
         return proc
     except Exception as exc:
         logger.error("Failed to start Streamlit dashboard: %s", exc)
