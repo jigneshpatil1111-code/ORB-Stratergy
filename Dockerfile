@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         curl \
         tzdata \
+        nginx \
+        gettext-base \
     && ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime \
     && echo "Asia/Kolkata" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
@@ -46,4 +48,5 @@ EXPOSE 8000 8501
 # Removed to prevent conflicts on Render when Webhook is disabled.
 
 # ── Entrypoint ─────────────────────────────────────────────────────────────
-CMD ["python", "-u", "main.py"]
+RUN chmod +x start.sh
+CMD ["./start.sh"]

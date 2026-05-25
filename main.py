@@ -162,12 +162,12 @@ def start_webhook_server() -> threading.Thread:
 
 def start_dashboard() -> Optional[subprocess.Popen]:
     """Launch the Streamlit dashboard as a detached subprocess."""
-    dashboard_path = PROJECT_ROOT / "dashboard.py"
-    if not dashboard_path.exists():
+    dashboard_path = os.path.join(PROJECT_ROOT, "dashboard.py")
+    if not Path(dashboard_path).exists():
         logger.warning("dashboard.py not found — skipping dashboard launch.")
         return None
 
-    port = os.environ.get("PORT", "8501")
+    port = "8501" # Hardcoded to 8501 for internal Nginx routing
     try:
         proc = subprocess.Popen(
             [
@@ -471,7 +471,7 @@ def main() -> None:
         logger.warning("Failed to send Telegram start notification: %s", exc)
 
     # ── 8. Start webhook server (daemon thread) ───────────────────────────
-    # webhook_thread = start_webhook_server() # Disabled for Render deployment
+    webhook_thread = start_webhook_server() # Disabled for Render deployment
 
     # ── 9. Start dashboard subprocess ─────────────────────────────────────
     _dashboard_proc = start_dashboard()
