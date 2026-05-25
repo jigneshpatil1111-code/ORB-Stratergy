@@ -308,6 +308,9 @@ def _render_live_scanner(db: TradeDB) -> None:
     """Tab 1 — 📡 Live Scanner."""
     st.markdown("### 📡 Live Scanner — NIFTY 50 Universe")
 
+    # --- Search Filter ---
+    search_q = st.text_input("🔍 Search Stocks in Live Scanner", placeholder="Type symbol to filter (e.g. INFY)").strip().upper()
+
     # --- Load stock states from DB ---
     try:
         states = db.load_stock_states()
@@ -317,6 +320,9 @@ def _render_live_scanner(db: TradeDB) -> None:
     if states:
         rows = []
         for s in states:
+            sym = s.get("symbol", "").upper()
+            if search_q and search_q not in sym:
+                continue
             rows.append({
                 "Status": _state_color(s.get("state", "")),
                 "Symbol": s.get("symbol", ""),
@@ -327,45 +333,86 @@ def _render_live_scanner(db: TradeDB) -> None:
                 "Direction": "🟢 LONG" if s.get("orb_is_green") else "🔴 SHORT",
                 "LTP": f"₹{s.get('ltp', 0):.2f}" if s.get("ltp") else "—",
             })
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True, height=600)
+        if rows:
+            df = pd.DataFrame(rows)
+            st.dataframe(df, use_container_width=True, hide_index=True, height=600)
+        else:
+            st.info("No stocks match your search.")
     else:
         st.info("⏳ No stock states available yet. The engine populates this after 09:20 IST.")
 
-    # --- TradingView chart widget ---
-    st.markdown("### 📊 Interactive Live Chart")
-    chart_symbol = st.text_input("🔍 Search Symbol for Chart (e.g., NSE:RELIANCE, AAPL)", value="NSE:NIFTY")
+def _render_watchlist_and_chart() -> None:
+    """New Tab — 🔭 Watchlist & Chart"""
+    st.markdown("### 🔭 Watchlist & Chart")
+    
+    colA, colB = st.columns([1, 2])
+    
+    with colA:
+        st.markdown("#### 📝 Your Watchlist")
+        import json
+        univ_path = os.path.join(_PROJECT_ROOT, "nifty50.json")
+        try:
+            if os.path.exists(univ_path):
+                with open(univ_path, "r") as f:
+                    univ = json.load(f)
+            else:
+                univ = []
+        except Exception:
+            univ = []
+            
+        if univ:
+            wl_df = pd.DataFrame(univ)
+            st.dataframe(wl_df, use_container_width=True, hide_index=True, height=400)
+        else:
+            st.info("Watchlist is empty.")
+            
+        st.markdown("#### ➕ Add New Stock")
+        new_sym = st.text_input("Symbol (e.g. RELIANCE)", key="wl_new_sym")
+        new_sec_id = st.number_input("Security ID (Dhan)", min_value=1, step=1, key="wl_new_id")
+        if st.button("Add to Watchlist", key="wl_add_btn"):
+            if new_sym and new_sec_id > 1:
+                if any(x.get("symbol") == new_sym.upper() for x in univ):
+                    st.warning(f"⚠️ {new_sym.upper()} is already in the watchlist!")
+                else:
+                    univ.append({"security_id": int(new_sec_id), "symbol": new_sym.upper(), "exchange": "NSE_EQ"})
+                    with open(univ_path, "w") as f:
+                        json.dump(univ, f, indent=2)
+                    st.success(f"✅ {new_sym.upper()} added!")
+                    st.rerun()
+            else:
+                st.warning("Please provide a valid Symbol and Security ID.")
 
-    tradingview_html = f"""
-    <div style="border: 1px solid rgba(0,212,255,0.15); border-radius:12px; overflow:hidden; margin-top:10px;">
-    <!-- TradingView Widget BEGIN -->
-    <div class="tradingview-widget-container">
-      <div id="tradingview_custom"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-      <script type="text/javascript">
-      new TradingView.widget({{
-        "autosize": true,
-        "symbol": "{chart_symbol}",
-        "interval": "5",
-        "timezone": "Asia/Kolkata",
-        "theme": "dark",
-        "style": "1",
-        "locale": "en",
-        "toolbar_bg": "#0a0a0f",
-        "enable_publishing": false,
-        "hide_top_toolbar": false,
-        "hide_legend": false,
-        "save_image": false,
-        "container_id": "tradingview_custom",
-        "width": "100%",
-        "height": "500"
-      }});
-      </script>
-    </div>
-    <!-- TradingView Widget END -->
-    </div>
-    """
-    st.components.v1.html(tradingview_html, height=540, scrolling=False)
+    with colB:
+        st.markdown("#### 📊 Professional Chart")
+        chart_symbol = st.text_input("🔍 TradingView Symbol (e.g. NSE:RELIANCE)", value="NSE:NIFTY", key="tv_chart_sym")
+        tradingview_html = f"""
+        <div style="border: 1px solid rgba(0,212,255,0.15); border-radius:12px; overflow:hidden; margin-top:10px;">
+        <div class="tradingview-widget-container">
+          <div id="tradingview_custom"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+          new TradingView.widget({{
+            "autosize": true,
+            "symbol": "{chart_symbol}",
+            "interval": "5",
+            "timezone": "Asia/Kolkata",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#0a0a0f",
+            "enable_publishing": false,
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "save_image": false,
+            "container_id": "tradingview_custom",
+            "width": "100%",
+            "height": "700"
+          }});
+          </script>
+        </div>
+        </div>
+        """
+        st.components.v1.html(tradingview_html, height=720, scrolling=False)
 
 
 def _render_active_positions(db: TradeDB) -> None:
@@ -575,39 +622,6 @@ def _render_system_status(db: TradeDB) -> None:
 
     st.markdown("---")
 
-    # --- Add Stock to Watchlist ---
-    st.markdown("#### ➕ Add Stock to Watchlist")
-    st.caption("Add a new stock to your nifty50.json scanner universe. (Requires Dhan Security ID)")
-    
-    import json
-    colA, colB = st.columns(2)
-    new_sym = colA.text_input("Symbol (e.g., INFY)", key="new_stock_sym")
-    new_sec_id = colB.number_input("Security ID", min_value=1, step=1, key="new_stock_id")
-    if st.button("Add to Scanner"):
-        if new_sym and new_sec_id > 1:
-            try:
-                univ_path = os.path.join(_PROJECT_ROOT, "nifty50.json")
-                if os.path.exists(univ_path):
-                    with open(univ_path, "r") as f:
-                        univ = json.load(f)
-                else:
-                    univ = []
-                
-                # Check if already exists
-                if any(x.get("symbol") == new_sym.upper() for x in univ):
-                    st.warning(f"⚠️ {new_sym.upper()} is already in the watchlist!")
-                else:
-                    univ.append({"security_id": int(new_sec_id), "symbol": new_sym.upper(), "exchange": "NSE_EQ"})
-                    with open(univ_path, "w") as f:
-                        json.dump(univ, f, indent=2)
-                    st.success(f"✅ {new_sym.upper()} added! It will be scanned in the next pre-market setup.")
-            except Exception as e:
-                st.error(f"Failed to add stock: {e}")
-        else:
-            st.warning("⚠️ Please provide a valid Symbol and Security ID.")
-
-    st.markdown("---")
-
     # --- System info ---
     st.markdown("#### ℹ️ System Info")
     info_data = {
@@ -675,8 +689,9 @@ def main() -> None:
     st.markdown("---")
 
     # --- Tabs ---
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📡 Live Scanner",
+        "🔭 Watchlist & Chart",
         "📈 Active Positions",
         "📋 Trade History",
         "⬇️ Export",
@@ -686,12 +701,14 @@ def main() -> None:
     with tab1:
         _render_live_scanner(db)
     with tab2:
-        _render_active_positions(db)
+        _render_watchlist_and_chart()
     with tab3:
-        _render_trade_history(db)
+        _render_active_positions(db)
     with tab4:
-        _render_export(db)
+        _render_trade_history(db)
     with tab5:
+        _render_export(db)
+    with tab6:
         _render_system_status(db)
 
 
