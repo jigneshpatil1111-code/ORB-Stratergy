@@ -83,13 +83,25 @@ class RiskManager:
             return 0
 
         qty = math.floor(self.effective_capital / entry_price)
+        qty = max(qty, 0)
+
+        # Enforce per-trade quantity cap (for safe live testing)
+        max_qty = getattr(settings, "MAX_QTY_PER_TRADE", 0)
+        if max_qty > 0 and qty > max_qty:
+            logger.info(
+                "Quantity capped: calculated=%d, max_allowed=%d",
+                qty, max_qty,
+            )
+            qty = max_qty
+
         logger.debug(
-            "Quantity calc: ₹%.2f capital / ₹%.2f price = %d shares",
+            "Quantity calc: ₹%.2f capital / ₹%.2f price = %d shares (max_per_trade=%d)",
             self.effective_capital,
             entry_price,
             qty,
+            max_qty,
         )
-        return max(qty, 0)
+        return qty
 
     # ------------------------------------------------------------------
     # Target calculation

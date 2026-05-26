@@ -120,6 +120,7 @@ class TelegramNotifier:
             f"📝 Mode    : <b>{settings.mode_label}</b>\n"
             f"💰 Capital : <code>₹{settings.effective_capital:,.0f}</code> "
             f"({settings.LEVERAGE}x leverage)\n"
+            f"📦 Max Qty : <code>{settings.MAX_QTY_PER_TRADE} share/trade</code>\n"
             f"📊 Range   : <code>≤ {settings.MAX_RANGE_PCT}%</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━"
         )

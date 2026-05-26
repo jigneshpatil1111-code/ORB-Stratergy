@@ -75,8 +75,11 @@ class Settings:
 
     # --- Mode -----------------------------------------------------------------
     PAPER_TRADING: bool = field(
-        default_factory=lambda: os.getenv("PAPER_TRADING", "true").lower()
+        default_factory=lambda: os.getenv("PAPER_TRADING", "false").lower()
         in ("true", "1", "yes")
+    )
+    MAX_QTY_PER_TRADE: int = field(
+        default_factory=lambda: int(os.getenv("MAX_QTY_PER_TRADE", "1"))
     )
 
     # --- Security & storage ---------------------------------------------------
@@ -179,7 +182,7 @@ class Settings:
     @property
     def mode_label(self) -> str:
         """Human-readable trading mode string."""
-        return "📝 PAPER" if self.PAPER_TRADING else "🔴 LIVE"
+        return "📝 PAPER" if self.PAPER_TRADING else "💰 LIVE"
 
     def __repr__(self) -> str:
         return (

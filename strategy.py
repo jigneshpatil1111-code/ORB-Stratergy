@@ -354,13 +354,15 @@ class ORBStrategyEngine:
         # Log candle to database
         try:
             self.db.log_candle({
+                "date": _get_ist_now().strftime("%Y-%m-%d"),
                 "security_id": sec_id,
                 "symbol": stock.symbol,
-                "candle_type": "ORB",
+                "timeframe": "ORB",
                 "open": stock.orb_open,
                 "high": stock.orb_high,
                 "low": stock.orb_low,
                 "close": stock.orb_close,
+                "volume": 0,
                 "timestamp": _get_ist_now().isoformat(),
             })
         except Exception as exc:
@@ -522,13 +524,15 @@ class ORBStrategyEngine:
         # Log the candle
         try:
             self.db.log_candle({
+                "date": _get_ist_now().strftime("%Y-%m-%d"),
                 "security_id": sec_id,
                 "symbol": stock.symbol,
-                "candle_type": "PULLBACK_CHECK",
+                "timeframe": "PULLBACK_CHECK",
                 "open": c_open,
                 "high": c_high,
                 "low": c_low,
                 "close": c_close,
+                "volume": 0,
                 "timestamp": _get_ist_now().isoformat(),
             })
         except Exception as exc:
@@ -697,24 +701,17 @@ class ORBStrategyEngine:
         # Log to database
         try:
             trade_record = {
+                "date": now.strftime("%Y-%m-%d"),
                 "security_id": sec_id,
                 "symbol": stock.symbol,
                 "side": stock.side,
                 "entry_price": ltp,
                 "sl_price": sl_price,
-                "target_1rr": target_1rr,
-                "target_2rr": target_2rr,
+                "target_price": target_1rr,
                 "quantity": qty,
                 "remaining_qty": qty,
                 "order_id": order_id,
                 "status": "ENTERED",
-                "orb_open": stock.orb_open,
-                "orb_high": stock.orb_high,
-                "orb_low": stock.orb_low,
-                "orb_close": stock.orb_close,
-                "orb_range_pct": stock.orb_range_pct,
-                "pullback_high": stock.pullback_high,
-                "pullback_low": stock.pullback_low,
                 "entry_time": now.isoformat(),
             }
             stock.trade_id = self.db.log_trade(trade_record)
@@ -781,7 +778,22 @@ class ORBStrategyEngine:
             target_hit = True
 
         if target_hit:
-            self._book_partial_profit(stock, ltp)
+            # When quantity is 1, we can't do partial booking (50% of 1 = 0 remaining).
+            # Instead, exit the full position at 1RR target.
+            if stock.quantity <= 1:
+                logger.info(
+                    "%s: 1RR TARGET HIT @ %.2f — qty=1, full exit (no partial possible)",
+                    stock.symbol, ltp,
+                )
+                self._exit_trade(
+                    stock=stock,
+                    exit_price=ltp,
+                    exit_qty=stock.remaining_qty,
+                    reason="1RR Target Hit (single share)",
+                    new_state=SQUARED_OFF,
+                )
+            else:
+                self._book_partial_profit(stock, ltp)
 
     def _book_partial_profit(self, stock: StockState, ltp: float) -> None:
         """Book 50 % of the position at 1:1 RR and move SL to entry."""

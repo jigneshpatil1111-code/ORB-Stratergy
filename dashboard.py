@@ -638,7 +638,8 @@ def _render_system_status(db: TradeDB) -> None:
     info_data = {
         "Version": APP_VERSION,
         "Database Path": settings.DB_PATH,
-        "Paper Trading": str(settings.PAPER_TRADING),
+        "Trading Mode": "💰 LIVE" if not settings.PAPER_TRADING else "📝 PAPER",
+        "Max Qty/Trade": str(getattr(settings, "MAX_QTY_PER_TRADE", "—")),
         "Base Capital": f"₹{settings.BASE_CAPITAL:,.0f}",
         "Leverage": f"{settings.LEVERAGE}x",
         "Max Range %": f"{settings.MAX_RANGE_PCT}%",
