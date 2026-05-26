@@ -17,6 +17,13 @@ from unittest.mock import MagicMock, patch, call
 # Configure path so we can import modules from current directory
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Force stdout to UTF-8 to prevent UnicodeEncodeError on Windows terminals
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from config import settings
 from strategy import (
     ORBStrategyEngine,
