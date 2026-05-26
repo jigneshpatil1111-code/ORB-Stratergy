@@ -345,24 +345,24 @@ def _render_watchlist_and_chart() -> None:
     """New Tab — 🔭 Watchlist & Chart"""
     st.markdown("### 🔭 Watchlist & Chart")
     
-    colA, colB = st.columns([1, 2])
+    import json
+    univ_path = os.path.join(_PROJECT_ROOT, "nifty50.json")
+    try:
+        if os.path.exists(univ_path):
+            with open(univ_path, "r") as f:
+                univ = json.load(f)
+        else:
+            univ = []
+    except Exception:
+        univ = []
+        
+    colA, colB = st.columns([1, 3])
     
     with colA:
         st.markdown("#### 📝 Your Watchlist")
-        import json
-        univ_path = os.path.join(_PROJECT_ROOT, "nifty50.json")
-        try:
-            if os.path.exists(univ_path):
-                with open(univ_path, "r") as f:
-                    univ = json.load(f)
-            else:
-                univ = []
-        except Exception:
-            univ = []
-            
         if univ:
             wl_df = pd.DataFrame(univ)
-            st.dataframe(wl_df, use_container_width=True, hide_index=True, height=400)
+            st.dataframe(wl_df, use_container_width=True, hide_index=True, height=350)
         else:
             st.info("Watchlist is empty.")
             
@@ -384,11 +384,20 @@ def _render_watchlist_and_chart() -> None:
 
     with colB:
         st.markdown("#### 📊 Professional Chart")
-        chart_symbol = st.text_input("🔍 TradingView Symbol (e.g. NSE:RELIANCE)", value="NSE:NIFTY", key="tv_chart_sym")
+        
+        # Watchlist dropdown selection
+        symbols_list = sorted([x.get("symbol") for x in univ])
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            selected_stock = st.selectbox("🎯 Select Stock", options=["NIFTY"] + symbols_list, index=0)
+        with col2:
+            chart_symbol = st.text_input("🔍 TradingView Symbol (e.g. NSE:RELIANCE)", value=f"NSE:{selected_stock}", key="tv_chart_sym")
+            
         tradingview_html = f"""
-        <div style="border: 1px solid rgba(0,212,255,0.15); border-radius:12px; overflow:hidden; margin-top:10px;">
-        <div class="tradingview-widget-container">
-          <div id="tradingview_custom"></div>
+        <div style="border: 1px solid rgba(0,212,255,0.15); border-radius:12px; overflow:hidden; margin-top:10px; height: 600px;">
+        <div class="tradingview-widget-container" style="height:100%; width:100%;">
+          <div id="tradingview_custom" style="height:100%; width:100%;"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
           <script type="text/javascript">
           new TradingView.widget({{
@@ -401,18 +410,20 @@ def _render_watchlist_and_chart() -> None:
             "locale": "en",
             "toolbar_bg": "#0a0a0f",
             "enable_publishing": false,
-            "hide_top_toolbar": false,
-            "hide_legend": false,
-            "save_image": false,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "save_image": true,
             "container_id": "tradingview_custom",
-            "width": "100%",
-            "height": "700"
+            "studies": [
+              "RSI@tv-basicstudies",
+              "MASimple@tv-basicstudies"
+            ]
           }});
           </script>
         </div>
         </div>
         """
-        st.components.v1.html(tradingview_html, height=720, scrolling=False)
+        st.components.v1.html(tradingview_html, height=620, scrolling=False)
 
 
 def _render_active_positions(db: TradeDB) -> None:
