@@ -74,6 +74,7 @@ def test_buy_flow_qty1():
     settings.LEVERAGE = 5
     settings.MAX_RANGE_PCT = 1.5
     settings.MIN_STOCK_PRICE = 60
+    settings.MAX_STOCK_PRICE = 5000
 
     risk_mgr = RiskManager(base_capital=50000, leverage=5)
 
@@ -243,6 +244,7 @@ def test_sl_hit_qty1():
 
     mock_notifier = MagicMock()
     settings.MAX_QTY_PER_TRADE = 1
+    settings.MAX_STOCK_PRICE = 5000
 
     risk_mgr = RiskManager(base_capital=50000, leverage=5)
     engine = ORBStrategyEngine(
@@ -367,6 +369,80 @@ def test_settings_config():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# TEST 5: Verify MIN_STOCK_PRICE and MAX_STOCK_PRICE rejection
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_stock_price_filters():
+    """Verify that stocks are rejected if they fall outside MIN_STOCK_PRICE or MAX_STOCK_PRICE."""
+    print("\n" + "=" * 60)
+    print("TEST 5: Stock price filter validation")
+    print("=" * 60)
+
+    # Setup settings
+    settings.MIN_STOCK_PRICE = 60
+    settings.MAX_STOCK_PRICE = 1000
+
+    # Mock DB
+    db_mock = MagicMock()
+
+    # Create strategy engine
+    risk_mgr = RiskManager(base_capital=50000, leverage=5)
+    engine = ORBStrategyEngine(
+        broker=MagicMock(),
+        risk_mgr=risk_mgr,
+        db=db_mock,
+        notifier=MagicMock(),
+        settings_obj=settings
+    )
+
+    # Mock stock list
+    stock_mock_low = MagicMock()
+    stock_mock_low.symbol = "PENNY"
+    stock_mock_low.orb_close = 50.0
+    stock_mock_low.orb_high = 51.0
+    stock_mock_low.orb_low = 49.0
+    stock_mock_low.state = WAITING_FIRST_CANDLE
+
+    stock_mock_high = MagicMock()
+    stock_mock_high.symbol = "EXPENSIVE"
+    stock_mock_high.orb_close = 1500.0
+    stock_mock_high.orb_high = 1510.0
+    stock_mock_high.orb_low = 1490.0
+    stock_mock_high.state = WAITING_FIRST_CANDLE
+
+    stock_mock_ok = MagicMock()
+    stock_mock_ok.symbol = "OK_STOCK"
+    stock_mock_ok.orb_close = 500.0
+    stock_mock_ok.orb_high = 502.0
+    stock_mock_ok.orb_low = 498.0
+    stock_mock_ok.state = WAITING_FIRST_CANDLE
+
+    engine.stocks = {
+        1001: stock_mock_low,
+        1002: stock_mock_high,
+        1003: stock_mock_ok,
+    }
+
+    # Run candle finalization
+    # 1. Low stock should be rejected
+    engine._analyze_orb(1001)
+    assert stock_mock_low.state == REJECTED, f"Expected REJECTED, got {stock_mock_low.state}"
+    print("✅ Stock with price 50.0 (below min 60) was correctly REJECTED")
+
+    # 2. High stock should be rejected
+    engine._analyze_orb(1002)
+    assert stock_mock_high.state == REJECTED, f"Expected REJECTED, got {stock_mock_high.state}"
+    print("✅ Stock with price 1500.0 (above max 1000) was correctly REJECTED")
+
+    # 3. Ok stock should be processed (state should change to ANALYZING_ORB or WAITING_PULLBACK, depending on logic, but not REJECTED)
+    engine._analyze_orb(1003)
+    assert stock_mock_ok.state != REJECTED, f"Expected not REJECTED, got {stock_mock_ok.state}"
+    print("✅ Stock with price 500.0 (between 60 and 1000) was NOT rejected")
+
+    print("\n✅ TEST 5 PASSED: Stock price filters work correctly!")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main runner
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -385,6 +461,7 @@ if __name__ == "__main__":
         ("RiskManager Qty Cap", test_risk_manager_qty_cap),
         ("BUY Flow (qty=1 → 1RR Target)", test_buy_flow_qty1),
         ("SL Hit (qty=1 → STOPPED_OUT)", test_sl_hit_qty1),
+        ("Stock Price Filters", test_stock_price_filters),
     ]
 
     import traceback

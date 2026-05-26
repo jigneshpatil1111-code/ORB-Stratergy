@@ -261,3 +261,22 @@ class RiskManager:
                 price, settings.MIN_STOCK_PRICE,
             )
         return is_valid
+
+    def validate_max_price(self, price: float) -> bool:
+        """
+        Reject stocks above the maximum price threshold.
+
+        Args:
+            price: Current / close price of the stock.
+
+        Returns:
+            True if the price is within the maximum limit.
+        """
+        is_valid = price <= settings.MAX_STOCK_PRICE
+        if not is_valid:
+            logger.debug(
+                "Price ₹%.2f above maximum ₹%.2f – rejected",
+                price, settings.MAX_STOCK_PRICE,
+            )
+        return is_valid
+

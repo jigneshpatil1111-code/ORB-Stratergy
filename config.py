@@ -68,6 +68,9 @@ class Settings:
     MIN_STOCK_PRICE: float = field(
         default_factory=lambda: float(os.getenv("MIN_STOCK_PRICE", "60"))
     )
+    MAX_STOCK_PRICE: float = field(
+        default_factory=lambda: float(os.getenv("MAX_STOCK_PRICE", "1000"))
+    )
 
     # --- Risk-reward constants ------------------------------------------------
     RR_RATIO: float = 2.0
@@ -172,6 +175,8 @@ class Settings:
             issues.append(f"BASE_CAPITAL must be > 0 (got {self.BASE_CAPITAL})")
         if self.LEVERAGE < 1:
             issues.append(f"LEVERAGE must be >= 1 (got {self.LEVERAGE})")
+        if self.MAX_STOCK_PRICE <= self.MIN_STOCK_PRICE:
+            issues.append(f"MAX_STOCK_PRICE (₹{self.MAX_STOCK_PRICE:.0f}) must be greater than MIN_STOCK_PRICE (₹{self.MIN_STOCK_PRICE:.0f})")
         return issues
 
     @property

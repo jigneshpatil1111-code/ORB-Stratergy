@@ -380,7 +380,8 @@ class ORBStrategyEngine:
 
         Validation rules:
         1. ORB close price must be ≥ MIN_STOCK_PRICE (₹60).
-        2. ORB range (high − low) / close must be ≤ MAX_RANGE_PCT (1.5 %).
+        2. ORB close price must be ≤ MAX_STOCK_PRICE (₹1000).
+        3. ORB range (high − low) / close must be ≤ MAX_RANGE_PCT (1.5 %).
 
         If valid, direction is set based on candle colour:
         * Green candle → BUY setup (look for red pullback, then buy on
@@ -393,7 +394,7 @@ class ORBStrategyEngine:
         orb_high = stock.orb_high
         orb_low = stock.orb_low
 
-        # Validation 1: minimum price
+        # Validation 1a: minimum price
         if orb_close < self.settings.MIN_STOCK_PRICE:
             stock.state = REJECTED
             logger.info(
@@ -403,6 +404,19 @@ class ORBStrategyEngine:
             self.db.log_system_event(
                 "STOCK_REJECTED",
                 f"{stock.symbol}: price {orb_close:.2f} below minimum {self.settings.MIN_STOCK_PRICE}",
+            )
+            return
+
+        # Validation 1b: maximum price
+        if orb_close > self.settings.MAX_STOCK_PRICE:
+            stock.state = REJECTED
+            logger.info(
+                "%s REJECTED: close ₹%.2f > max ₹%.2f",
+                stock.symbol, orb_close, self.settings.MAX_STOCK_PRICE,
+            )
+            self.db.log_system_event(
+                "STOCK_REJECTED",
+                f"{stock.symbol}: price {orb_close:.2f} above maximum {self.settings.MAX_STOCK_PRICE}",
             )
             return
 

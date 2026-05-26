@@ -644,6 +644,7 @@ def _render_system_status(db: TradeDB) -> None:
         "Leverage": f"{settings.LEVERAGE}x",
         "Max Range %": f"{settings.MAX_RANGE_PCT}%",
         "Min Stock Price": f"₹{settings.MIN_STOCK_PRICE:.0f}",
+        "Max Stock Price": f"₹{settings.MAX_STOCK_PRICE:.0f}",
         "Market Open": str(settings.MARKET_OPEN),
         "ORB Close": str(settings.ORB_CANDLE_CLOSE),
         "Scan Cutoff": str(settings.SCAN_CUTOFF),
