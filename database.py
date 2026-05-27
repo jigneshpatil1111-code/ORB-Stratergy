@@ -38,6 +38,13 @@ class TradeDB:
     token_store       – latest Dhan access token (dashboard paste)
     """
 
+    _TRADE_UPDATE_COLUMNS = frozenset({
+        "quantity", "entry_price", "sl_price", "target_price",
+        "exit_price", "exit_reason", "pnl", "status", "entry_time",
+        "exit_time", "order_id", "partial_order_id", "partial_qty",
+        "partial_price", "partial_pnl", "remaining_qty",
+    })
+
     def __init__(self, db_path: str) -> None:
         """
         Initialise the database, creating the directory and all tables
@@ -89,12 +96,16 @@ class TradeDB:
                         sl_price        REAL    NOT NULL DEFAULT 0.0,
                         target_price    REAL    NOT NULL DEFAULT 0.0,
                         exit_price      REAL    DEFAULT NULL,
+                        exit_reason     TEXT    DEFAULT NULL,
                         pnl             REAL    DEFAULT NULL,
                         status          TEXT    NOT NULL DEFAULT 'OPEN',
                         entry_time      TEXT    DEFAULT NULL,
                         exit_time       TEXT    DEFAULT NULL,
                         order_id        TEXT    DEFAULT NULL,
                         partial_order_id TEXT   DEFAULT NULL,
+                        partial_qty     INTEGER NOT NULL DEFAULT 0,
+                        partial_price   REAL    DEFAULT NULL,
+                        partial_pnl     REAL    NOT NULL DEFAULT 0.0,
                         remaining_qty   INTEGER DEFAULT 0
                     );
 
@@ -145,9 +156,26 @@ class TradeDB:
                     CREATE INDEX IF NOT EXISTS idx_events_timestamp
                         ON system_events(timestamp);
                 """)
+                self._add_missing_trade_columns(conn)
                 conn.commit()
             finally:
                 conn.close()
+
+    @staticmethod
+    def _add_missing_trade_columns(conn: sqlite3.Connection) -> None:
+        """Bring databases created by older app versions up to date."""
+        existing = {
+            row[1] for row in conn.execute("PRAGMA table_info(trades)").fetchall()
+        }
+        missing_columns = {
+            "exit_reason": "TEXT DEFAULT NULL",
+            "partial_qty": "INTEGER NOT NULL DEFAULT 0",
+            "partial_price": "REAL DEFAULT NULL",
+            "partial_pnl": "REAL NOT NULL DEFAULT 0.0",
+        }
+        for column, definition in missing_columns.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE trades ADD COLUMN {column} {definition}")
 
     # ------------------------------------------------------------------
     # Trade operations
@@ -202,6 +230,10 @@ class TradeDB:
         """
         if not updates:
             return
+        unknown_columns = set(updates) - self._TRADE_UPDATE_COLUMNS
+        if unknown_columns:
+            unknown = ", ".join(sorted(unknown_columns))
+            raise ValueError(f"Unsupported trade update columns: {unknown}")
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [trade_id]
 
@@ -304,8 +336,9 @@ class TradeDB:
             headers = [
                 "id", "date", "security_id", "symbol", "side", "quantity",
                 "entry_price", "sl_price", "target_price", "exit_price",
-                "pnl", "status", "entry_time", "exit_time",
-                "order_id", "partial_order_id", "remaining_qty",
+                "exit_reason", "pnl", "status", "entry_time", "exit_time",
+                "order_id", "partial_order_id", "partial_qty",
+                "partial_price", "partial_pnl", "remaining_qty",
             ]
         else:
             headers = list(trade_dicts[0].keys())

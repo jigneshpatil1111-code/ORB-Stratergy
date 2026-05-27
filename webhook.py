@@ -10,13 +10,14 @@ All times in IST (Asia/Kolkata). Currency in INR (₹).
 """
 
 import logging
+import secrets
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from config import settings
 from database import TradeDB
@@ -30,6 +31,9 @@ _START_TIME = time.monotonic()
 _START_DATETIME = datetime.now(IST)
 
 logger = logging.getLogger("orb.webhook")
+_INSECURE_WEBHOOK_SECRETS = {
+    "", "changeme", "your_webhook_secret", "replace_with_a_long_random_secret",
+}
 
 # ---------------------------------------------------------------------------
 # Pydantic models for request / response validation
@@ -45,7 +49,7 @@ class WebhookSignal(BaseModel):
     message: Optional[str] = Field(None, max_length=500, description="Free-text alert message")
     timestamp: Optional[str] = Field(None, description="ISO-8601 timestamp from TradingView")
 
-    @validator("action")
+    @field_validator("action")
     def action_must_be_valid(cls, v: str) -> str:  # noqa: N805
         allowed = {"BUY", "SELL", "EXIT", "LONG", "SHORT", "CLOSE"}
         upper = v.strip().upper()
@@ -53,7 +57,7 @@ class WebhookSignal(BaseModel):
             raise ValueError(f"action must be one of {allowed}")
         return upper
 
-    @validator("symbol")
+    @field_validator("symbol")
     def symbol_upper(cls, v: str) -> str:  # noqa: N805
         return v.strip().upper()
 
@@ -178,13 +182,15 @@ async def receive_webhook(
     """
     # --- Authenticate ---
     expected_secret = settings.WEBHOOK_SECRET
-    if expected_secret:
-        if x_webhook_secret is None or x_webhook_secret != expected_secret:
-            logger.warning(
+    if expected_secret.strip().lower() in _INSECURE_WEBHOOK_SECRETS:
+        logger.error("Webhook rejected because WEBHOOK_SECRET is not securely configured.")
+        raise HTTPException(status_code=503, detail="Webhook is disabled until a secure secret is configured.")
+    if x_webhook_secret is None or not secrets.compare_digest(x_webhook_secret, expected_secret):
+        logger.warning(
                 "Webhook auth failed from %s — bad or missing secret.",
                 request.client.host if request.client else "unknown",
-            )
-            raise HTTPException(status_code=401, detail="Invalid or missing X-Webhook-Secret header.")
+        )
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Webhook-Secret header.")
 
     logger.info(
         "Webhook signal received: symbol=%s action=%s price=%.2f",
@@ -196,18 +202,7 @@ async def receive_webhook(
     # --- Persist to database ---
     db = _get_db()
     try:
-        signal_record = {
-            "source": "tradingview_webhook",
-            "symbol": signal.symbol,
-            "action": signal.action,
-            "price": signal.price,
-            "timeframe": signal.timeframe or "",
-            "strategy_name": signal.strategy_name or "",
-            "message": signal.message or "",
-            "signal_timestamp": signal.timestamp or _now_ist().isoformat(),
-            "received_at": _now_ist().isoformat(),
-            "client_ip": request.client.host if request.client else "unknown",
-        }
+        received_at = _now_ist()
 
         # Log as a system event (the dedicated signal table may be added later)
         db.log_system_event(
@@ -221,15 +216,16 @@ async def receive_webhook(
         # Also store as a candle-like record for auditing
         signal_id_hash = abs(hash(f"{signal.symbol}{signal.action}{signal.price}{time.time()}")) % 10**9
         db.log_candle({
+            "date": received_at.strftime("%Y-%m-%d"),
             "security_id": signal_id_hash,
             "symbol": signal.symbol,
-            "timestamp": _now_ist().isoformat(),
+            "timeframe": "WEBHOOK_SIGNAL",
+            "timestamp": received_at.isoformat(),
             "open": signal.price,
             "high": signal.price,
             "low": signal.price,
             "close": signal.price,
             "volume": 0,
-            "source": "webhook",
         })
 
         logger.info("Webhook signal persisted. hash_id=%d", signal_id_hash)

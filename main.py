@@ -84,16 +84,17 @@ def load_universe() -> list[dict]:
 # ║  TOKEN MANAGEMENT                                                       ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 
-def check_and_refresh_token() -> None:
+def check_and_refresh_token() -> bool:
     """
     Check token health. If expired, look in the database for an updated token
     (possibly pasted via the dashboard). If found, hot-swap it into the broker
-    and market feed.
+    and market feed. Return whether a usable token is available.
     """
     global _broker, _feed, _notifier, _db
 
     if _broker is None or _db is None or _notifier is None:
-        return
+        logger.error("Cannot validate broker token before components are initialised.")
+        return False
 
     # 1. Try current token
     try:
@@ -103,7 +104,7 @@ def check_and_refresh_token() -> None:
 
     if healthy:
         logger.info("Broker token is healthy.")
-        return
+        return True
 
     logger.warning("Broker token health check FAILED — looking for updated token in DB.")
     _notifier.token_expired()
@@ -120,16 +121,27 @@ def check_and_refresh_token() -> None:
         _broker.update_token(db_token)
         if _feed is not None:
             _feed.update_token(db_token)
-        _db.log_system_event("TOKEN_REFRESHED", "Token hot-swapped from DB at startup.")
-        _notifier.send("🔑 Access token refreshed from dashboard.")
+        try:
+            healthy = _broker.check_token_health()
+        except Exception:
+            healthy = False
+        if healthy:
+            _db.log_system_event("TOKEN_REFRESHED", "Token hot-swapped from DB and validated.")
+            _notifier.send("🔑 Access token refreshed from dashboard.")
+            return True
+        logger.warning("Updated token from DB also failed broker health validation.")
     else:
-        logger.warning(
-            "No updated token in DB. System will retry, but trading may be blocked."
-        )
-        _notifier.error_alert(
-            "⚠️ Dhan token expired and no replacement found in DB. "
-            "Please update via dashboard → System Status → Update Token."
-        )
+        logger.warning("No new token available in DB.")
+
+    _db.log_system_event(
+        "TOKEN_INVALID",
+        "Broker token validation failed; automatic trading cannot start until token is updated.",
+    )
+    _notifier.error_alert(
+        "⚠️ Dhan token invalid or expired. Automatic trading is disabled "
+        "until a valid token is updated via dashboard → System Status → Update Token."
+    )
+    return False
 
 
 # ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -215,7 +227,13 @@ def pre_market_setup() -> None:
         return
 
     # 1. Token check
-    check_and_refresh_token()
+    if not check_and_refresh_token():
+        logger.error("Pre-market setup aborted: no valid Dhan access token.")
+        _db.log_system_event(
+            "PRE_MARKET_ABORTED",
+            "No valid Dhan access token; live feed and automatic orders were not started.",
+        )
+        return
 
     # 2. Load universe
     try:
@@ -231,9 +249,10 @@ def pre_market_setup() -> None:
         risk_mgr=risk_mgr,
         db=_db,
         notifier=_notifier,
-        settings=settings,
+        settings_obj=settings,
     )
     _strategy.initialize_day(universe)
+    _strategy.restore_states()
     set_strategy_engine(_strategy)
 
     # 4. Prepare instruments for market feed

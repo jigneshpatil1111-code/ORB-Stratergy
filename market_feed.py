@@ -44,6 +44,14 @@ class LiveMarketFeed:
     _MAX_RECONNECT_RETRIES: int = 5
     _BASE_BACKOFF: float = 2.0        # seconds
     _MAX_BACKOFF: float = 60.0        # cap
+    _EXCHANGE_SEGMENTS = {
+        "NSE": MarketFeed.NSE,
+        "NSE_EQ": MarketFeed.NSE,
+        "BSE": MarketFeed.BSE,
+        "BSE_EQ": MarketFeed.BSE,
+        "NSE_FNO": MarketFeed.NSE_FNO,
+        "MCX": MarketFeed.MCX,
+    }
 
     def __init__(self, client_id: str, access_token: str) -> None:
         self._client_id: str = client_id
@@ -100,10 +108,19 @@ class LiveMarketFeed:
             ``exchange_segment`` is a ``MarketFeed`` constant (e.g.
             ``MarketFeed.NSE``) and ``security_id`` is an int or str.
         """
+        normalised: list[tuple[int, str]] = []
+        for exchange, security_id in instruments:
+            if isinstance(exchange, str):
+                try:
+                    exchange = self._EXCHANGE_SEGMENTS[exchange.upper()]
+                except KeyError as exc:
+                    raise ValueError(
+                        f"Unsupported market-feed exchange segment: {exchange}"
+                    ) from exc
+            normalised.append((exchange, str(security_id)))
+
         with self._lock:
-            self._instruments = [
-                (exch, str(sec_id)) for exch, sec_id in instruments
-            ]
+            self._instruments = normalised
         logger.info("Instruments set: %d symbols", len(instruments))
 
     def set_on_tick(self, callback: Callable[[dict], None]) -> None:

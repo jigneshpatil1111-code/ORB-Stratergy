@@ -115,6 +115,7 @@ class StockState:
 
     # P&L
     trade_pnl: float = 0.0
+    ltp: float = 0.0
 
     # Guards
     traded_today: bool = False
@@ -195,6 +196,7 @@ class ORBStrategyEngine:
 
         # Track the 5-min slot each builder is accumulating into
         self.current_candle_slot: dict[int, datetime] = {}
+        self._last_state_save: dict[int, datetime] = {}
 
         logger.info("ORBStrategyEngine initialised")
 
@@ -214,6 +216,7 @@ class ORBStrategyEngine:
         self.stocks.clear()
         self.candle_builder.clear()
         self.current_candle_slot.clear()
+        self._last_state_save.clear()
 
         for stock in universe:
             sec_id = int(stock["security_id"])
@@ -255,14 +258,20 @@ class ORBStrategyEngine:
         stock = self.stocks[sec_id]
         now = _get_ist_now()
         current_time = now.time()
+        ltp = float(tick.get("LTP", 0.0))
+        if ltp > 0:
+            stock.ltp = ltp
 
         # Skip if in a terminal state
         if stock.state in (STOPPED_OUT, SQUARED_OFF, REJECTED, EXPIRED):
             return
 
+        previous_state = stock.state
+
         # Automatic 14:30 square-off check
         if current_time >= SQUARE_OFF_TIME and stock.state in (TRADE_ENTERED, PARTIAL_BOOKED):
             self._force_square_off_single(stock, tick, reason="14:30 auto square-off")
+            self._maybe_save_state(stock, now, force=True)
             return
 
         # Route to appropriate handler
@@ -288,6 +297,8 @@ class ORBStrategyEngine:
             self.notifier.error_alert(
                 f"Tick processing error for {stock.symbol}: {exc}"
             )
+        finally:
+            self._maybe_save_state(stock, now, force=(stock.state != previous_state))
 
     # ------------------------------------------------------------------
     # State handler: WAITING_FIRST_CANDLE
@@ -1046,6 +1057,12 @@ class ORBStrategyEngine:
                 ltp = self.broker.get_ltp(stock.security_id)
             except Exception:
                 ltp = stock.entry_price  # Fallback
+            if ltp <= 0:
+                logger.warning(
+                    "%s: No valid LTP during square-off; using entry price for P&L estimate",
+                    stock.symbol,
+                )
+                ltp = stock.entry_price
 
             self._force_square_off_single(
                 stock, {"LTP": ltp, "security_id": stock.security_id},
@@ -1143,44 +1160,64 @@ class ORBStrategyEngine:
     # State persistence (for recovery)
     # ------------------------------------------------------------------
 
+    def _state_snapshot(self, stock: StockState) -> dict:
+        """Build the serialisable state shared by recovery and dashboard."""
+        return {
+            "security_id": stock.security_id,
+            "symbol": stock.symbol,
+            "exchange": stock.exchange,
+            "state": stock.state,
+            "orb_open": stock.orb_open,
+            "orb_high": stock.orb_high,
+            "orb_low": stock.orb_low,
+            "orb_close": stock.orb_close,
+            "orb_range_pct": stock.orb_range_pct,
+            "orb_is_green": stock.orb_is_green,
+            "pullback_high": stock.pullback_high,
+            "pullback_low": stock.pullback_low,
+            "pullback_detected": stock.pullback_detected,
+            "entry_price": stock.entry_price,
+            "sl_price": stock.sl_price,
+            "target_1rr": stock.target_1rr,
+            "target_2rr": stock.target_2rr,
+            "quantity": stock.quantity,
+            "remaining_qty": stock.remaining_qty,
+            "side": stock.side,
+            "order_id": stock.order_id,
+            "partial_order_id": stock.partial_order_id,
+            "trade_pnl": stock.trade_pnl,
+            "ltp": stock.ltp,
+            "traded_today": stock.traded_today,
+            "trade_id": stock.trade_id,
+            "timestamp": _get_ist_now().isoformat(),
+        }
+
+    def _persist_stock_state(self, stock: StockState) -> None:
+        try:
+            self.db.save_stock_state(self._state_snapshot(stock))
+        except Exception as exc:
+            logger.error("Failed to save state for %s: %s", stock.symbol, exc)
+
+    def _maybe_save_state(
+        self, stock: StockState, now: datetime, force: bool = False
+    ) -> None:
+        """Persist transitions immediately and active prices at most every 5 seconds."""
+        last_saved = self._last_state_save.get(stock.security_id)
+        refresh_due = (
+            stock.state in (TRADE_ENTERED, PARTIAL_BOOKED)
+            and (last_saved is None or now - last_saved >= timedelta(seconds=5))
+        )
+        if force or refresh_due:
+            self._persist_stock_state(stock)
+            self._last_state_save[stock.security_id] = now
+
     def save_states(self) -> None:
         """Persist all non-terminal stock states to the database for
         crash recovery."""
         for stock in self.stocks.values():
             if stock.state in (WAITING_FIRST_CANDLE, REJECTED, EXPIRED):
                 continue
-            try:
-                state_dict = {
-                    "security_id": stock.security_id,
-                    "symbol": stock.symbol,
-                    "exchange": stock.exchange,
-                    "state": stock.state,
-                    "orb_open": stock.orb_open,
-                    "orb_high": stock.orb_high,
-                    "orb_low": stock.orb_low,
-                    "orb_close": stock.orb_close,
-                    "orb_range_pct": stock.orb_range_pct,
-                    "orb_is_green": stock.orb_is_green,
-                    "pullback_high": stock.pullback_high,
-                    "pullback_low": stock.pullback_low,
-                    "pullback_detected": stock.pullback_detected,
-                    "entry_price": stock.entry_price,
-                    "sl_price": stock.sl_price,
-                    "target_1rr": stock.target_1rr,
-                    "target_2rr": stock.target_2rr,
-                    "quantity": stock.quantity,
-                    "remaining_qty": stock.remaining_qty,
-                    "side": stock.side,
-                    "order_id": stock.order_id,
-                    "partial_order_id": stock.partial_order_id,
-                    "trade_pnl": stock.trade_pnl,
-                    "traded_today": stock.traded_today,
-                    "trade_id": stock.trade_id,
-                    "timestamp": _get_ist_now().isoformat(),
-                }
-                self.db.save_stock_state(state_dict)
-            except Exception as exc:
-                logger.error("Failed to save state for %s: %s", stock.symbol, exc)
+            self._persist_stock_state(stock)
 
     def restore_states(self) -> None:
         """Restore stock states from the database after a crash/restart."""
@@ -1217,6 +1254,7 @@ class ORBStrategyEngine:
             stock.order_id = state_dict.get("order_id", "")
             stock.partial_order_id = state_dict.get("partial_order_id", "")
             stock.trade_pnl = float(state_dict.get("trade_pnl", 0))
+            stock.ltp = float(state_dict.get("ltp", 0))
             stock.traded_today = bool(state_dict.get("traded_today", False))
             stock.trade_id = int(state_dict.get("trade_id", 0))
             restored += 1

@@ -39,21 +39,18 @@ _NSE_HOLIDAYS: set[date] = {
     date(2025, 12, 25),  # Christmas
     # --- 2026 ---
     date(2026, 1, 26),   # Republic Day
-    date(2026, 2, 17),   # Mahashivratri
-    date(2026, 3, 4),    # Holi
-    date(2026, 3, 20),   # Id-ul-Fitr (Ramadan)
-    date(2026, 3, 25),   # Shri Mahavir Jayanti
+    date(2026, 3, 3),    # Holi
+    date(2026, 3, 26),   # Shri Ram Navami
+    date(2026, 3, 31),   # Shri Mahavir Jayanti
     date(2026, 4, 3),    # Good Friday
     date(2026, 4, 14),   # Dr. Ambedkar Jayanti
     date(2026, 5, 1),    # Maharashtra Day
     date(2026, 5, 28),   # Bakri Id (Eid-ul-Adha)
-    date(2026, 7, 17),   # Muharram
-    date(2026, 8, 15),   # Independence Day
-    date(2026, 8, 18),   # Ganesh Chaturthi (tentative)
+    date(2026, 6, 26),   # Muharram
+    date(2026, 9, 14),   # Ganesh Chaturthi
     date(2026, 10, 2),   # Mahatma Gandhi Jayanti
-    date(2026, 10, 8),   # Dussehra
-    date(2026, 10, 29),  # Diwali (Laxmi Pujan) (tentative)
-    date(2026, 10, 30),  # Diwali Balipratipada (tentative)
+    date(2026, 10, 20),  # Dussehra
+    date(2026, 11, 10),  # Diwali Balipratipada
     date(2026, 11, 24),  # Gurunanak Jayanti
     date(2026, 12, 25),  # Christmas
 }

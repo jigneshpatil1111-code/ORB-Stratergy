@@ -16,9 +16,9 @@ All times in IST (Asia/Kolkata). Currency in INR (₹).
 """
 
 import os
+import secrets
 import sys
 import time
-import hashlib
 from datetime import datetime, timezone, timedelta, date
 
 import streamlit as st
@@ -41,6 +41,7 @@ from database import TradeDB  # noqa: E402
 IST = timezone(timedelta(hours=5, minutes=30))
 _BOOT_TIME = datetime.now(IST)
 APP_VERSION = "1.0.0"
+_INSECURE_DASHBOARD_PASSWORDS = {"", "admin123", "replace_with_strong_password"}
 
 # ---------------------------------------------------------------------------
 # Streamlit page config — MUST be first Streamlit call
@@ -290,9 +291,12 @@ def _check_password() -> bool:
     with col2:
         st.markdown("#### 🔐 Dashboard Login")
         password = st.text_input("Password", type="password", key="login_pw", placeholder="Enter dashboard password")
+        expected = os.environ.get("DASHBOARD_PASSWORD", "") or getattr(settings, "DASHBOARD_PASSWORD", "")
+        if expected.strip().lower() in _INSECURE_DASHBOARD_PASSWORDS:
+            st.error("Dashboard is disabled until a strong DASHBOARD_PASSWORD is configured.")
+            return False
         if st.button("Login", key="login_btn", use_container_width=True):
-            expected = os.environ.get("DASHBOARD_PASSWORD", "") or getattr(settings, "DASHBOARD_PASSWORD", "")
-            if password and password == expected:
+            if password and secrets.compare_digest(password, expected):
                 st.session_state["authenticated"] = True
                 st.rerun()
             else:

@@ -171,6 +171,12 @@ class Settings:
             issues.append("TELEGRAM_BOT_TOKEN is not set – notifications disabled")
         if not self.TELEGRAM_CHAT_ID:
             issues.append("TELEGRAM_CHAT_ID is not set – notifications disabled")
+        if self.WEBHOOK_SECRET.strip().lower() in {
+            "", "changeme", "your_webhook_secret", "replace_with_a_long_random_secret",
+        }:
+            issues.append("WEBHOOK_SECRET must be replaced with a strong secret")
+        if self.DASHBOARD_PASSWORD.strip().lower() in {"", "admin123", "replace_with_strong_password"}:
+            issues.append("DASHBOARD_PASSWORD must be replaced with a strong password")
         if self.BASE_CAPITAL <= 0:
             issues.append(f"BASE_CAPITAL must be > 0 (got {self.BASE_CAPITAL})")
         if self.LEVERAGE < 1:
